@@ -73,16 +73,10 @@ RUN cp requirements.txt /usr/src/paperless/requirements.txt
 RUN cp -R ./src /usr/src/paperless/
 
 
-# Install requirements – pinned build tools kvůli pikepdf 5.1.1
-RUN python3 -m pip install --upgrade \
-      "pip<23.3" \
-      "setuptools<61" \
-      "wheel<0.40" \
-      "setuptools_scm<7" \
-      "tomli<2" \
-      supervisor \
- && env QPDF_SOURCE_TREE=/qpdf PIP_NO_BUILD_ISOLATION=1 \
-      python3 -m pip install --no-cache-dir -r requirements.txt
+# Install requirements
+RUN python3 -m pip install --upgrade pip wheel setuptools supervisor \
+    && env QPDF_SOURCE_TREE=/qpdf PIP_PREFER_BINARY=1 \
+       python3 -m pip install --no-cache-dir -r requirements.txt
 
 
 #### Redis Setup
@@ -113,6 +107,9 @@ RUN addgroup --gid 1000 paperless \
     && chmod 755 /sbin/docker-entrypoint.sh
 
 WORKDIR /usr/src/paperless/src/
+# Přepiš starou problematickou verzi pikepdf na wheel-friendly 6.2.9
+RUN sed -i 's/^pikepdf==.*/pikepdf==6.2.9/' requirements.txt
+
 
 ENV PAPERLESS_REDIS="redis://localhost:6379"
 
