@@ -1,7 +1,7 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
-#Dependencies
+# Dependencies
 RUN apt-get update \
     && apt-get -y --no-install-recommends install \
     build-essential \
@@ -48,13 +48,14 @@ RUN apt-get update \
     zlib1g \
     && mkdir /var/log/supervisord /var/run/supervisord
 
+# Paperless-ngx zdroj
 RUN wget -O paperless.tar.xz https://github.com/paperless-ngx/paperless-ngx/releases/download/ngx-1.7.0/paperless-ngx-1.7.0.tar.xz \
     && 7z x paperless.tar.xz \
     && 7z x paperless.tar -o/usr/src/ \
-    && cd /usr/src 
+    && cd /usr/src
 
-# Fix aarch64 builds
-# see: https://github.com/pikepdf/pikepdf/issues/194#issuecomment-1020419586
+# Fix aarch64 builds (QPDF)
+# viz: https://github.com/pikepdf/pikepdf/issues/194#issuecomment-1020419586
 RUN wget -O qpdf.tar.gz https://github.com/qpdf/qpdf/releases/download/release-qpdf-10.6.3/qpdf-10.6.3.tar.gz \
     && tar zxf qpdf.tar.gz \
     && mv qpdf-10.6.3 qpdf \
@@ -63,40 +64,42 @@ RUN wget -O qpdf.tar.gz https://github.com/qpdf/qpdf/releases/download/release-q
     && ./configure \
     && make
 
+# Pracovní adresář je zdrojový balík paperless-ngx
 WORKDIR /usr/src/paperless-ngx/
 
-# We need to make the directory before coping to it
+# Připrav cílový adresář a requirements pro instalaci
 RUN mkdir -p /usr/src/paperless/src
 RUN cp requirements.txt /usr/src/paperless/requirements.txt
 
-# copy app
+# Zkopíruj aplikaci
 RUN cp -R ./src /usr/src/paperless/
 
+# >>> DŮLEŽITÉ: přepiš problematickou verzi pikepdf ve SPRÁVNÉM requirements <<<
+# (musí být tady, před instalací a v /usr/src/paperless-ngx/)
+RUN sed -i 's/^pikepdf==.*/pikepdf==6.2.9/' requirements.txt \
+ && grep -n '^pikepdf' requirements.txt
 
-# Install requirements
+# Instalace Python závislostí (preferuj binární wheely)
 RUN python3 -m pip install --upgrade pip wheel setuptools supervisor \
     && env QPDF_SOURCE_TREE=/qpdf PIP_PREFER_BINARY=1 \
        python3 -m pip install --no-cache-dir -r requirements.txt
 
-
 #### Redis Setup
-RUN apt-get install redis-server redis-tools -y
+RUN apt-get install -y redis-server redis-tools
 RUN sed -i "s/bind .*/bind 127.0.0.1/g" /etc/redis/redis.conf
 
 # Clean Up
 RUN apt-get -y purge build-essential libqpdf-dev \
     && apt-get -y autoremove --purge \
-    && rm -rf /var/lib/apt/lists/* 
+    && rm -rf /var/lib/apt/lists/*
 
 # copy scripts
-# FROM ORIGINAL DOCKER FILE: this fixes issues with imagemagick and PDF
+# FROM ORIGINAL DOCKER FILE: fixy pro ImageMagick a PDF
 RUN cp docker/imagemagick-policy.xml /etc/ImageMagick-6/policy.xml
 RUN cp gunicorn.conf.py /usr/src/paperless
 RUN cp docker/supervisord.conf /etc/supervisord.conf
-# RUN cp docker/docker-entrypoint.sh /sbin/docker-entrypoint.sh
 COPY scripts/docker-entrypoint.sh /sbin/docker-entrypoint.sh
 COPY scripts/docker-prepare.sh /sbin/docker-prepare.sh
-
 
 WORKDIR /usr/src/paperless
 
@@ -107,9 +110,6 @@ RUN addgroup --gid 1000 paperless \
     && chmod 755 /sbin/docker-entrypoint.sh
 
 WORKDIR /usr/src/paperless/src/
-# Přepiš starou problematickou verzi pikepdf na wheel-friendly 6.2.9
-RUN sed -i 's/^pikepdf==.*/pikepdf==6.2.9/' requirements.txt
-
 
 ENV PAPERLESS_REDIS="redis://localhost:6379"
 
@@ -117,16 +117,13 @@ COPY scripts/wait-for-redis.sh scripts/wait-for-redis.sh
 RUN sudo chmod +x scripts/wait-for-redis.sh
 
 RUN sudo -HEu paperless python3 manage.py collectstatic --clear --no-input
-
 RUN sudo -HEu paperless python3 manage.py compilemessages
-
 
 VOLUME ["/usr/src/paperless/data", "/usr/src/paperless/media", "/usr/src/paperless/consume", "/usr/src/paperless/export"]
 
 COPY scripts/setup_superuser.py scripts/setup_superuser.py
 ENTRYPOINT ["/bin/bash", "/sbin/docker-entrypoint.sh"]
 EXPOSE 8000
-
 
 CMD ["/usr/local/bin/supervisord", "-c", "/etc/supervisord.conf"]
 
