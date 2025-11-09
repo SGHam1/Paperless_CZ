@@ -40,6 +40,7 @@ RUN apt-get update \
     tesseract-ocr-fra \
     tesseract-ocr-ita \
     tesseract-ocr-spa \
+    tesseract-ocr-ces \
     tzdata \
     unpaper \
     unzip \
