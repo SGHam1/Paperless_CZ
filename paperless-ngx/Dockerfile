@@ -73,9 +73,10 @@ RUN cp requirements.txt /usr/src/paperless/requirements.txt
 RUN cp -R ./src /usr/src/paperless/
 
 
-# Install requirements
-RUN python3 -m pip install --upgrade pip supervisor setuptools \
+# Install requirements (pin pip/setuptools kvůli pikepdf==5.1.1)
+RUN python3 -m pip install --upgrade "pip<24.3" "setuptools<66" wheel supervisor \
     && env QPDF_SOURCE_TREE=/qpdf python3 -m pip install --no-cache-dir -r requirements.txt
+
 
 #### Redis Setup
 RUN apt-get install redis-server redis-tools -y
